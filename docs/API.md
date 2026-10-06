@@ -7,7 +7,9 @@ All routes except login and health require `Authorization: Bearer <JWT>`.
 - `POST /auth/login`
 - `GET /auth/me`
 - `GET|PATCH /profile`
+- `GET /profile/avatar` — authenticated profile image bytes
 - `GET|PATCH /preferences`
+- `GET /events` — authenticated Server-Sent Events stream
 
 ## Attendance and leave
 
@@ -48,3 +50,5 @@ All routes except login and health require `Authorization: Bearer <JWT>`.
 - `GET /health`
 
 DTO validation is defined in `apps/api/src/workplace/workplace.dto.ts`. Controllers define authorization; services enforce ownership and team constraints.
+
+`PATCH /profile` uses multipart form data (`displayName`, optional `avatar`). Avatar formats are JPG, PNG, or WebP up to 2 MB and the bytes are stored in PostgreSQL.

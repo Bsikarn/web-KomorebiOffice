@@ -11,10 +11,10 @@
 | Team | User, Attendance, OfficePresence | Connected |
 | Approval queues | LeaveRequest, TaskSubmission | Connected |
 | Employee directory/create | User, Department, Team, UserPreference, LeaveAllowance | Connected |
-| Virtual Office | OfficePresence, MeetingSpace | Connected |
-| In-app chat | DirectMessage | Connected |
-| Notifications | Notification | Connected |
-| Profile | User, Department, Team | Connected |
+| Virtual Office | OfficePresence, MeetingSpace | Connected; click-to-walk coordinates persist and sync live |
+| In-app chat | DirectMessage | Connected; realtime via SSE |
+| Notifications | Notification | Connected; realtime in-app and browser notification permission UI |
+| Profile | User, Department, Team, avatar bytes | Connected; name and photo editable |
 | Settings | UserPreference | Connected |
 
-External meeting and call destinations intentionally leave the application; the configured room URL is stored in `MeetingSpace`. Calendar weekend labels are derived from dates rather than stored business records.
+External meeting and call destinations intentionally leave the application; Meeting A and Meeting B have independent URLs stored in `MeetingSpace`. Calendar weekend labels are derived from dates rather than stored business records. Browser-level notifications require a trusted HTTPS origin; realtime in-app updates continue to work over the classroom HTTP endpoint.

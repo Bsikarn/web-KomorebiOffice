@@ -4,14 +4,23 @@ import * as argon2 from 'argon2';
 import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../database/prisma.service';
 import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto } from './workplace.dto';
+import { RealtimeService } from './realtime.service';
 
 @Injectable()
 export class WorkplaceService {
-  constructor(private readonly db: PrismaService) {}
+  constructor(private readonly db: PrismaService, private readonly realtime?: RealtimeService) {}
+
+  events(user: AuthUser) { return this.realtime!.events(user.sub); }
+
+  private async activeUserIds() {
+    return (await this.db.user.findMany({ where: { active: true }, select: { id: true } })).map(user => user.id);
+  }
 
   private async notify(userIds: string[], title: string, body: string) {
     if (!userIds.length) return;
-    await this.db.notification.createMany({ data: [...new Set(userIds)].map(userId => ({ userId, title, body })) });
+    const recipients = [...new Set(userIds)];
+    await this.db.notification.createMany({ data: recipients.map(userId => ({ userId, title, body })) });
+    this.realtime?.emit(recipients, { resource: 'notifications', title, body });
   }
 
   attendance(user: AuthUser) {
@@ -33,13 +42,17 @@ export class WorkplaceService {
     const active = await this.db.attendance.findFirst({ where: { userId: user.sub, status: 'WORKING' } });
     if (active) throw new BadRequestException('You are already checked in');
     if (dto.workMode === WorkMode.OFFICE && !dto.photoPath?.trim()) throw new BadRequestException('Office check-in requires a photo');
-    return this.db.attendance.create({ data: { userId: user.sub, workMode: dto.workMode, photoPath: dto.workMode === WorkMode.OFFICE ? dto.photoPath : null } });
+    const attendance = await this.db.attendance.create({ data: { userId: user.sub, workMode: dto.workMode, photoPath: dto.workMode === WorkMode.OFFICE ? dto.photoPath : null } });
+    this.realtime?.emit(await this.activeUserIds(), { resource: 'attendance' });
+    return attendance;
   }
 
   async checkOut(user: AuthUser) {
     const active = await this.db.attendance.findFirst({ where: { userId: user.sub, status: 'WORKING' }, orderBy: { checkedIn: 'desc' } });
     if (!active) throw new BadRequestException('No active attendance');
-    return this.db.attendance.update({ where: { id: active.id }, data: { status: 'COMPLETED', checkedOut: new Date() } });
+    const attendance = await this.db.attendance.update({ where: { id: active.id }, data: { status: 'COMPLETED', checkedOut: new Date() } });
+    this.realtime?.emit(await this.activeUserIds(), { resource: 'attendance' });
+    return attendance;
   }
 
   leaves(user: AuthUser) {
@@ -61,6 +74,7 @@ export class WorkplaceService {
     const created = await this.db.leaveRequest.create({ data: { userId: user.sub, type: dto.type, startDate: new Date(dto.startDate), endDate: new Date(dto.endDate), days, reason: dto.reason } });
     const leaders = await this.db.user.findMany({ where: { role: Role.TEAM_LEADER, teamId: user.teamId ?? undefined, active: true }, select: { id: true } });
     await this.notify(leaders.map(x => x.id), 'Leave approval needed', `${user.displayName} requested ${days} day(s) of leave.`);
+    this.realtime?.emit([user.sub, ...leaders.map(x => x.id)], { resource: 'leaves' });
     return created;
   }
 
@@ -85,6 +99,7 @@ export class WorkplaceService {
       await this.notify(hrs.map(x => x.id), 'HR leave approval needed', `${request.user.displayName}'s leave passed Team Leader review.`);
     }
     await this.notify([request.userId], 'Leave request updated', `Your leave request is now ${status.toLowerCase().replaceAll('_', ' ')}.`);
+    this.realtime?.emit([request.userId, user.sub], { resource: 'approvals' });
     return updated;
   }
 
@@ -99,6 +114,7 @@ export class WorkplaceService {
     if (user.role === Role.TEAM_LEADER && assignees.some(x => x.teamId !== user.teamId)) throw new ForbiddenException('Team Leaders can only assign within their team');
     const task = await this.db.task.create({ data: { title: dto.title, description: dto.description, priority: dto.priority, dueAt: dto.dueAt ? new Date(dto.dueAt) : null, createdById: user.sub, assignees: { create: [...new Set(dto.assigneeIds)].map(userId => ({ userId })) } }, include: { assignees: true } });
     await this.notify(dto.assigneeIds, 'New task assigned', `${user.displayName} assigned “${dto.title}”.`);
+    this.realtime?.emit([user.sub, ...dto.assigneeIds], { resource: 'tasks' });
     return task;
   }
 
@@ -111,6 +127,7 @@ export class WorkplaceService {
       this.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.SUBMITTED } }),
     ]);
     await this.notify([assignment.task.createdById], 'Task ready for review', `${user.displayName} submitted “${assignment.task.title}”.`);
+    this.realtime?.emit([user.sub, assignment.task.createdById], { resource: 'tasks' });
     return submission;
   }
 
@@ -128,6 +145,7 @@ export class WorkplaceService {
       this.db.task.update({ where: { id: submission.taskId }, data: { status: dto.decision === ApprovalDecision.APPROVED ? TaskStatus.DONE : TaskStatus.IN_PROGRESS } }),
     ]);
     await this.notify([submission.submitterId], 'Task review completed', dto.decision === ApprovalDecision.APPROVED ? 'Your task was approved.' : dto.note ?? 'Changes were requested.');
+    this.realtime?.emit([submission.submitterId, user.sub], { resource: 'tasks' });
     return { ok: true };
   }
 
@@ -142,6 +160,7 @@ export class WorkplaceService {
     const announcement = await this.db.announcement.create({ data: { title: dto.title, body: dto.body, authorId: user.sub, audiences: { create: audience } }, include: { audiences: true } });
     const recipients = await this.db.user.findMany({ where: { active: true, ...(audience.type === AudienceType.TEAM ? { teamId: audience.teamId! } : audience.type === AudienceType.ROLE ? { role: audience.role! } : {}) }, select: { id: true } });
     await this.notify(recipients.map(x => x.id), 'New announcement', dto.title);
+    this.realtime?.emit(recipients.map(x => x.id), { resource: 'announcements' });
     return announcement;
   }
 
@@ -149,18 +168,24 @@ export class WorkplaceService {
   employees(departmentId?: string, role?: Role) { return this.db.user.findMany({ where: { active: true, departmentId: departmentId || undefined, role: role || undefined }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, presence: true }, orderBy: { displayName: 'asc' } }); }
   async createEmployee(dto: CreateEmployeeDto) {
     const passwordHash = await argon2.hash(dto.password);
-    return this.db.$transaction(async db => {
+    const created = await this.db.$transaction(async db => {
       const created = await db.user.create({ data: { email: dto.email.toLowerCase(), passwordHash, displayName: dto.displayName, jobTitle: dto.jobTitle, role: dto.role, departmentId: dto.departmentId, teamId: dto.teamId }, select: { id: true, email: true, displayName: true, role: true } });
       await db.userPreference.create({ data: { userId: created.id } });
       await db.leaveAllowance.createMany({ data: [{ userId: created.id, type: 'VACATION', allowance: 10 }, { userId: created.id, type: 'SICK', allowance: 10 }, { userId: created.id, type: 'PERSONAL', allowance: 3 }] });
       return created;
     });
+    this.realtime?.emit(await this.activeUserIds(), { resource: 'employees' });
+    return created;
   }
   teams() { return this.db.team.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }); }
   notifications(user: AuthUser) { return this.db.notification.findMany({ where: { userId: user.sub }, orderBy: { createdAt: 'desc' }, take: 30 }); }
   markNotification(user: AuthUser, id: string) { return this.db.notification.updateMany({ where: { id, userId: user.sub }, data: { readAt: new Date() } }); }
   presence() { return this.db.officePresence.findMany({ where: { room: { not: 'OFFLINE' } }, include: { user: { select: { id: true, displayName: true, role: true } } } }); }
-  updatePresence(user: AuthUser, dto: PresenceDto) { return this.db.officePresence.upsert({ where: { userId: user.sub }, create: { userId: user.sub, room: dto.room, x: dto.x ?? 0, y: dto.y ?? 0 }, update: { room: dto.room, x: dto.x ?? 0, y: dto.y ?? 0 } }); }
+  async updatePresence(user: AuthUser, dto: PresenceDto) {
+    const presence = await this.db.officePresence.upsert({ where: { userId: user.sub }, create: { userId: user.sub, room: dto.room, x: dto.x ?? 50, y: dto.y ?? 50 }, update: { room: dto.room, x: dto.x ?? 50, y: dto.y ?? 50 } });
+    this.realtime?.emit(await this.activeUserIds(), { resource: 'presence' });
+    return presence;
+  }
   meetingSpaces() { return this.db.meetingSpace.findMany({ where: { active: true }, orderBy: { name: 'asc' } }); }
 
   async dashboard(user: AuthUser) {
@@ -176,8 +201,13 @@ export class WorkplaceService {
     return { dueTasks, highPriority, teamWfh: teamWfh.map(row => row.user) };
   }
 
-  profile(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true } }); }
-  updateProfile(user: AuthUser, dto: UpdateProfileDto) { return this.db.user.update({ where: { id: user.sub }, data: { displayName: dto.displayName, jobTitle: dto.jobTitle }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true } }); }
+  profile(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, avatarUpdatedAt: true } }); }
+  profileAvatar(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { avatarData: true, avatarMime: true } }); }
+  async updateProfile(user: AuthUser, dto: UpdateProfileDto, avatar?: { buffer: Buffer; mimetype: string }) {
+    const updated = await this.db.user.update({ where: { id: user.sub }, data: { displayName: dto.displayName.trim(), ...(avatar ? { avatarData: Uint8Array.from(avatar.buffer), avatarMime: avatar.mimetype, avatarUpdatedAt: new Date() } : {}) }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, avatarUpdatedAt: true } });
+    this.realtime?.emit(await this.activeUserIds(), { resource: 'profile' });
+    return updated;
+  }
   preferences(user: AuthUser) { return this.db.userPreference.upsert({ where: { userId: user.sub }, update: {}, create: { userId: user.sub } }); }
   updatePreferences(user: AuthUser, dto: UpdatePreferencesDto) { return this.db.userPreference.upsert({ where: { userId: user.sub }, update: dto, create: { userId: user.sub, ...dto } }); }
 
@@ -195,6 +225,7 @@ export class WorkplaceService {
     if (!contact) throw new NotFoundException('Contact not found');
     const message = await this.db.directMessage.create({ data: { senderId: user.sub, recipientId: dto.recipientId, body: dto.body.trim() } });
     await this.notify([dto.recipientId], `New message from ${user.displayName}`, dto.body.trim().slice(0, 120));
+    this.realtime?.emit([user.sub, dto.recipientId], { resource: 'messages' });
     return message;
   }
 }

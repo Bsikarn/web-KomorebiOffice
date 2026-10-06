@@ -16,6 +16,7 @@ Browser
 - PostgreSQL: source of truth for all user-visible business data.
 - Prisma: schema, migrations, generated client, and demonstration seed.
 - Nginx: one public origin; API and database are not directly exposed.
+- Realtime: one authenticated SSE connection per signed-in browser. Mutations publish small invalidation events; the active screen refetches authoritative rows from PostgreSQL. This avoids continuous polling and keeps the database as the source of truth.
 
 ## Security boundaries
 
@@ -24,6 +25,7 @@ Browser
 - Team Leaders are limited to their team for assignments, announcements, messages, and leave review.
 - HR-only employee routes are protected at the controller.
 - Office check-in accepts JPG, PNG, or WebP up to 5 MB and requires an image. WFH does not accept or store one.
+- Profile images accept JPG, PNG, or WebP up to 2 MB and are served only through the authenticated API.
 - API rate limiting and Helmet are enabled.
 
 ## Data rule

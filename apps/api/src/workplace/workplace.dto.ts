@@ -55,7 +55,6 @@ export class CreateEmployeeDto {
 
 export class UpdateProfileDto {
   @IsString() @IsNotEmpty() @MaxLength(80) displayName!: string;
-  @IsOptional() @IsString() @MaxLength(100) jobTitle?: string;
 }
 
 export class UpdatePreferencesDto {

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Res, Sse, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import type { AuthUser } from '../auth/auth.types';
+import type { Response } from 'express';
 import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto } from './workplace.dto';
 import { WorkplaceService } from './workplace.service';
 
@@ -59,8 +60,21 @@ export class WorkplaceController {
   @Patch('office/presence') updatePresence(@CurrentUser() user: AuthUser, @Body() dto: PresenceDto) { return this.service.updatePresence(user, dto); }
   @Get('office/spaces') meetingSpaces() { return this.service.meetingSpaces(); }
   @Get('dashboard') dashboard(@CurrentUser() user: AuthUser) { return this.service.dashboard(user); }
+  @Sse('events') events(@CurrentUser() user: AuthUser) { return this.service.events(user); }
   @Get('profile') profile(@CurrentUser() user: AuthUser) { return this.service.profile(user); }
-  @Patch('profile') updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) { return this.service.updateProfile(user, dto); }
+  @Get('profile/avatar') async profileAvatar(@CurrentUser() user: AuthUser, @Res() response: Response) {
+    const avatar = await this.service.profileAvatar(user);
+    if (!avatar.avatarData || !avatar.avatarMime) return response.status(404).end();
+    response.setHeader('Content-Type', avatar.avatarMime);
+    response.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+    return response.send(Buffer.from(avatar.avatarData));
+  }
+  @Patch('profile')
+  @UseInterceptors(FileInterceptor('avatar', { limits: { fileSize: 2 * 1024 * 1024 } }))
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto, @UploadedFile() avatar?: { buffer: Buffer; mimetype: string }) {
+    if (avatar && !['image/jpeg', 'image/png', 'image/webp'].includes(avatar.mimetype)) throw new BadRequestException('Profile photo must be a JPG, PNG, or WebP image');
+    return this.service.updateProfile(user, dto, avatar);
+  }
   @Get('preferences') preferences(@CurrentUser() user: AuthUser) { return this.service.preferences(user); }
   @Patch('preferences') updatePreferences(@CurrentUser() user: AuthUser, @Body() dto: UpdatePreferencesDto) { return this.service.updatePreferences(user, dto); }
   @Get('messages/contacts') messageContacts(@CurrentUser() user: AuthUser) { return this.service.messageContacts(user); }

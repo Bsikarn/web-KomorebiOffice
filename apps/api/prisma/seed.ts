@@ -54,13 +54,13 @@ async function main() {
 
   await prisma.meetingSpace.upsert({
     where: { room: OfficeRoom.MEETING_A },
-    update: { name: 'Meeting Room A', externalUrl: 'https://meet.google.com/new', active: true },
-    create: { room: OfficeRoom.MEETING_A, name: 'Meeting Room A', externalUrl: 'https://meet.google.com/new' },
+    update: { name: 'Meeting Room A', externalUrl: 'https://meet.jit.si/KomorebiOfficeMeetingA', active: true },
+    create: { room: OfficeRoom.MEETING_A, name: 'Meeting Room A', externalUrl: 'https://meet.jit.si/KomorebiOfficeMeetingA' },
   });
   await prisma.meetingSpace.upsert({
     where: { room: OfficeRoom.MEETING_B },
-    update: { name: 'Meeting Room B', externalUrl: 'https://meet.google.com/new', active: true },
-    create: { room: OfficeRoom.MEETING_B, name: 'Meeting Room B', externalUrl: 'https://meet.google.com/new' },
+    update: { name: 'Meeting Room B', externalUrl: 'https://meet.jit.si/KomorebiOfficeMeetingB', active: true },
+    create: { room: OfficeRoom.MEETING_B, name: 'Meeting Room B', externalUrl: 'https://meet.jit.si/KomorebiOfficeMeetingB' },
   });
 
   const author = await prisma.user.findUniqueOrThrow({ where: { email: 'hr@komorebi.local' } });
