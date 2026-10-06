@@ -16,7 +16,7 @@ Browser
 - PostgreSQL: source of truth for all user-visible business data.
 - Prisma: schema, migrations, generated client, and demonstration seed.
 - Nginx: one public origin; API and database are not directly exposed.
-- Realtime: one authenticated SSE connection per signed-in browser. Mutations publish small invalidation events; the active screen refetches authoritative rows from PostgreSQL. This avoids continuous polling and keeps the database as the source of truth.
+- Realtime: one authenticated SSE connection per signed-in browser. Mutations publish resource-scoped invalidation events; only the component using that resource refetches authoritative rows from PostgreSQL. Pages are never remounted for realtime updates, so scroll position, filters, open dialogs, and draft input are preserved. This avoids continuous polling and keeps the database as the source of truth.
 
 ## Security boundaries
 
