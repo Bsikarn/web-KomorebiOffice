@@ -19,4 +19,4 @@ COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 WORKDIR /app/apps/api
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/src/main.js"]

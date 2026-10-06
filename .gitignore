@@ -7,4 +7,6 @@ coverage/
 !.env.example
 uploads/
 *.log
+.deploy/
+*.tar.gz
 

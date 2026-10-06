@@ -126,6 +126,7 @@ export class WorkplaceService {
   team(user: AuthUser) { return this.db.user.findMany({ where: { teamId: user.teamId ?? '__none__', active: true }, select: { id: true, displayName: true, role: true, department: true, presence: true } }); }
   employees(departmentId?: string, role?: Role) { return this.db.user.findMany({ where: { active: true, departmentId: departmentId || undefined, role: role || undefined }, select: { id: true, email: true, displayName: true, role: true, department: true, team: true, presence: true }, orderBy: { displayName: 'asc' } }); }
   async createEmployee(dto: CreateEmployeeDto) { return this.db.user.create({ data: { email: dto.email.toLowerCase(), passwordHash: await argon2.hash(dto.password), displayName: dto.displayName, role: dto.role, departmentId: dto.departmentId, teamId: dto.teamId }, select: { id: true, email: true, displayName: true, role: true } }); }
+  teams() { return this.db.team.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }); }
   notifications(user: AuthUser) { return this.db.notification.findMany({ where: { userId: user.sub }, orderBy: { createdAt: 'desc' }, take: 30 }); }
   markNotification(user: AuthUser, id: string) { return this.db.notification.updateMany({ where: { id, userId: user.sub }, data: { readAt: new Date() } }); }
   presence() { return this.db.officePresence.findMany({ where: { room: { not: 'OFFLINE' } }, include: { user: { select: { id: true, displayName: true, role: true } } } }); }

@@ -50,6 +50,7 @@ export class WorkplaceController {
   @Get('team') team(@CurrentUser() user: AuthUser) { return this.service.team(user); }
   @Roles(Role.HR) @Get('employees') employees(@Query('departmentId') departmentId?: string, @Query('role') role?: Role) { return this.service.employees(departmentId, role); }
   @Roles(Role.HR) @Post('employees') createEmployee(@Body() dto: CreateEmployeeDto) { return this.service.createEmployee(dto); }
+  @Roles(Role.HR) @Get('teams') teams() { return this.service.teams(); }
   @Get('notifications') notifications(@CurrentUser() user: AuthUser) { return this.service.notifications(user); }
   @Patch('notifications/:id/read') markNotification(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.markNotification(user, id); }
   @Get('office/presence') presence() { return this.service.presence(); }

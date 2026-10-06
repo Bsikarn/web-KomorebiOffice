@@ -40,7 +40,9 @@ Internet :443
   -> private subnet: NestJS API + PostgreSQL
 ```
 
-The provided Compose file keeps API and PostgreSQL on an internal Docker network. On two cloud instances, deploy `nginx` and `web` to the public instance, deploy `api` and `postgres` to the private instance, change `INTERNAL_API_URL` to the API private address, and permit the API port only from the public instance security group. Permit PostgreSQL only from the API host.
+The provided Compose file keeps API and PostgreSQL on an internal Docker network. For the University Cloud layout, use three instances: deploy `nginx` and `web` to the public instance, then deploy `api` and PostgreSQL to separate private instances. Give the web instance a private interface so it can reach the API without exposing the API publicly. Permit the API port only from that private web interface, and permit PostgreSQL only from the API instance.
+
+The classroom deployment is currently available at [http://45.77.40.35:10302](http://45.77.40.35:10302). Its public web tier proxies `/api` to the private API tier using `infra/nginx/university-cloud.conf`; the database has no public port mapping.
 
 For TLS, point the domain at the public IP, issue the certificate with Certbot using `infra/certbot/www`, then add a 443 server block using files under `/etc/letsencrypt/live/<domain>/`. Never commit `.env` or certificates.
 
