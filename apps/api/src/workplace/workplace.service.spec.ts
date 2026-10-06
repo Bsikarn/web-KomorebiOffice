@@ -29,3 +29,33 @@ describe('WorkplaceService attendance rules', () => {
     await assert.rejects(service.checkIn(user, { workMode: WorkMode.WFH }), /already checked in/);
   });
 });
+
+describe('WorkplaceService persisted business data', () => {
+  const user: AuthUser = { sub: 'u1', email: 'demo@example.com', displayName: 'Demo', role: Role.EMPLOYEE, teamId: 't1' };
+
+  it('calculates leave duration on the server instead of trusting the client', async () => {
+    const create = mock.fn(async (input: unknown) => input);
+    const db = {
+      leaveRequest: { create },
+      user: { findMany: mock.fn(async () => []) },
+      notification: { createMany: mock.fn() },
+    };
+    const service = new WorkplaceService(db as never);
+    await service.createLeave(user, { type: 'VACATION', startDate: '2026-10-01', endDate: '2026-10-03', days: 99, reason: 'Trip' });
+    assert.equal((create.mock.calls[0].arguments[0] as { data: { days: number } }).data.days, 3);
+  });
+
+  it('persists a direct message and notifies its recipient', async () => {
+    const created = { id: 'm1', senderId: 'u1', recipientId: 'u2', body: 'Hello' };
+    let savedBody = '';
+    const db = {
+      user: { findFirst: mock.fn(async () => ({ id: 'u2' })) },
+      directMessage: { create: mock.fn(async (input: { data: { body: string } }) => { savedBody = input.data.body; return created; }) },
+      notification: { createMany: mock.fn(async () => ({ count: 1 })) },
+    };
+    const service = new WorkplaceService(db as never);
+    assert.deepEqual(await service.sendMessage(user, { recipientId: 'u2', body: ' Hello ' }), created);
+    assert.equal(savedBody, 'Hello');
+    assert.equal(db.notification.createMany.mock.callCount(), 1);
+  });
+});

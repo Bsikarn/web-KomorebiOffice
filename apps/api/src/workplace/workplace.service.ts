@@ -3,7 +3,7 @@ import { ApprovalDecision, AudienceType, LeaveStatus, Role, TaskStatus, WorkMode
 import * as argon2 from 'argon2';
 import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../database/prisma.service';
-import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SubmitTaskDto } from './workplace.dto';
+import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto } from './workplace.dto';
 
 @Injectable()
 export class WorkplaceService {
@@ -16,6 +16,17 @@ export class WorkplaceService {
 
   attendance(user: AuthUser) {
     return this.db.attendance.findMany({ where: { userId: user.sub }, orderBy: { checkedIn: 'desc' }, take: 90 });
+  }
+
+  async attendanceCalendar(user: AuthUser, month?: string) {
+    const parsed = month && /^\d{4}-\d{2}$/.test(month) ? new Date(`${month}-01T00:00:00.000Z`) : new Date();
+    const start = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, 1));
+    const [attendance, leaves] = await Promise.all([
+      this.db.attendance.findMany({ where: { userId: user.sub, checkedIn: { gte: start, lt: end } }, orderBy: { checkedIn: 'asc' } }),
+      this.db.leaveRequest.findMany({ where: { userId: user.sub, status: LeaveStatus.APPROVED, startDate: { lt: end }, endDate: { gte: start } }, select: { id: true, startDate: true, endDate: true, type: true } }),
+    ]);
+    return { month: start.toISOString().slice(0, 7), attendance, leaves };
   }
 
   async checkIn(user: AuthUser, dto: CheckInDto) {
@@ -35,11 +46,21 @@ export class WorkplaceService {
     return this.db.leaveRequest.findMany({ where: { userId: user.sub }, include: { approvals: { include: { reviewer: { select: { displayName: true, role: true } } } } }, orderBy: { createdAt: 'desc' } });
   }
 
+  async leaveBalances(user: AuthUser) {
+    const yearStart = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+    const [allowances, used] = await Promise.all([
+      this.db.leaveAllowance.findMany({ where: { userId: user.sub } }),
+      this.db.leaveRequest.groupBy({ by: ['type'], where: { userId: user.sub, status: LeaveStatus.APPROVED, startDate: { gte: yearStart } }, _sum: { days: true } }),
+    ]);
+    return allowances.map(item => ({ type: item.type, allowance: item.allowance, used: used.find(row => row.type === item.type)?._sum.days ?? 0, remaining: item.allowance - (used.find(row => row.type === item.type)?._sum.days ?? 0) }));
+  }
+
   async createLeave(user: AuthUser, dto: CreateLeaveDto) {
     if (new Date(dto.endDate) < new Date(dto.startDate)) throw new BadRequestException('End date must not be before start date');
-    const created = await this.db.leaveRequest.create({ data: { userId: user.sub, type: dto.type, startDate: new Date(dto.startDate), endDate: new Date(dto.endDate), days: dto.days, reason: dto.reason } });
+    const days = Math.floor((new Date(dto.endDate).getTime() - new Date(dto.startDate).getTime()) / 86_400_000) + 1;
+    const created = await this.db.leaveRequest.create({ data: { userId: user.sub, type: dto.type, startDate: new Date(dto.startDate), endDate: new Date(dto.endDate), days, reason: dto.reason } });
     const leaders = await this.db.user.findMany({ where: { role: Role.TEAM_LEADER, teamId: user.teamId ?? undefined, active: true }, select: { id: true } });
-    await this.notify(leaders.map(x => x.id), 'Leave approval needed', `${user.displayName} requested ${dto.days} day(s) of leave.`);
+    await this.notify(leaders.map(x => x.id), 'Leave approval needed', `${user.displayName} requested ${days} day(s) of leave.`);
     return created;
   }
 
@@ -84,6 +105,7 @@ export class WorkplaceService {
   async submitTask(user: AuthUser, taskId: string, dto: SubmitTaskDto) {
     const assignment = await this.db.taskAssignee.findUnique({ where: { taskId_userId: { taskId, userId: user.sub } }, include: { task: true } });
     if (!assignment) throw new ForbiddenException();
+    if (assignment.task.status === TaskStatus.SUBMITTED || assignment.task.status === TaskStatus.DONE) throw new BadRequestException('This task is not open for another submission');
     const [submission] = await this.db.$transaction([
       this.db.taskSubmission.create({ data: { taskId, submitterId: user.sub, note: dto.note } }),
       this.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.SUBMITTED } }),
@@ -123,12 +145,56 @@ export class WorkplaceService {
     return announcement;
   }
 
-  team(user: AuthUser) { return this.db.user.findMany({ where: { teamId: user.teamId ?? '__none__', active: true }, select: { id: true, displayName: true, role: true, department: true, presence: true } }); }
-  employees(departmentId?: string, role?: Role) { return this.db.user.findMany({ where: { active: true, departmentId: departmentId || undefined, role: role || undefined }, select: { id: true, email: true, displayName: true, role: true, department: true, team: true, presence: true }, orderBy: { displayName: 'asc' } }); }
-  async createEmployee(dto: CreateEmployeeDto) { return this.db.user.create({ data: { email: dto.email.toLowerCase(), passwordHash: await argon2.hash(dto.password), displayName: dto.displayName, role: dto.role, departmentId: dto.departmentId, teamId: dto.teamId }, select: { id: true, email: true, displayName: true, role: true } }); }
+  team(user: AuthUser) { return this.db.user.findMany({ where: { teamId: user.teamId ?? '__none__', active: true }, select: { id: true, displayName: true, jobTitle: true, role: true, department: true, presence: true, attendances: { orderBy: { checkedIn: 'desc' }, take: 1, select: { workMode: true, status: true, checkedIn: true } } } }); }
+  employees(departmentId?: string, role?: Role) { return this.db.user.findMany({ where: { active: true, departmentId: departmentId || undefined, role: role || undefined }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, presence: true }, orderBy: { displayName: 'asc' } }); }
+  async createEmployee(dto: CreateEmployeeDto) {
+    const passwordHash = await argon2.hash(dto.password);
+    return this.db.$transaction(async db => {
+      const created = await db.user.create({ data: { email: dto.email.toLowerCase(), passwordHash, displayName: dto.displayName, jobTitle: dto.jobTitle, role: dto.role, departmentId: dto.departmentId, teamId: dto.teamId }, select: { id: true, email: true, displayName: true, role: true } });
+      await db.userPreference.create({ data: { userId: created.id } });
+      await db.leaveAllowance.createMany({ data: [{ userId: created.id, type: 'VACATION', allowance: 10 }, { userId: created.id, type: 'SICK', allowance: 10 }, { userId: created.id, type: 'PERSONAL', allowance: 3 }] });
+      return created;
+    });
+  }
   teams() { return this.db.team.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }); }
   notifications(user: AuthUser) { return this.db.notification.findMany({ where: { userId: user.sub }, orderBy: { createdAt: 'desc' }, take: 30 }); }
   markNotification(user: AuthUser, id: string) { return this.db.notification.updateMany({ where: { id, userId: user.sub }, data: { readAt: new Date() } }); }
   presence() { return this.db.officePresence.findMany({ where: { room: { not: 'OFFLINE' } }, include: { user: { select: { id: true, displayName: true, role: true } } } }); }
   updatePresence(user: AuthUser, dto: PresenceDto) { return this.db.officePresence.upsert({ where: { userId: user.sub }, create: { userId: user.sub, room: dto.room, x: dto.x ?? 0, y: dto.y ?? 0 }, update: { room: dto.room, x: dto.x ?? 0, y: dto.y ?? 0 } }); }
+  meetingSpaces() { return this.db.meetingSpace.findMany({ where: { active: true }, orderBy: { name: 'asc' } }); }
+
+  async dashboard(user: AuthUser) {
+    const now = new Date();
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(todayStart); tomorrow.setDate(tomorrow.getDate() + 1);
+    const taskWhere = user.role === Role.HR ? {} : user.role === Role.TEAM_LEADER ? { OR: [{ createdById: user.sub }, { assignees: { some: { userId: user.sub } } }] } : { assignees: { some: { userId: user.sub } } };
+    const [dueTasks, highPriority, teamWfh] = await Promise.all([
+      this.db.task.count({ where: { ...taskWhere, status: { not: TaskStatus.DONE }, dueAt: { gte: todayStart, lt: tomorrow } } }),
+      this.db.task.count({ where: { ...taskWhere, status: { not: TaskStatus.DONE }, priority: 'HIGH' } }),
+      user.teamId ? this.db.attendance.findMany({ where: { checkedIn: { gte: todayStart, lt: tomorrow }, workMode: WorkMode.WFH, user: { teamId: user.teamId } }, distinct: ['userId'], select: { user: { select: { id: true, displayName: true } } } }) : [],
+    ]);
+    return { dueTasks, highPriority, teamWfh: teamWfh.map(row => row.user) };
+  }
+
+  profile(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true } }); }
+  updateProfile(user: AuthUser, dto: UpdateProfileDto) { return this.db.user.update({ where: { id: user.sub }, data: { displayName: dto.displayName, jobTitle: dto.jobTitle }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true } }); }
+  preferences(user: AuthUser) { return this.db.userPreference.upsert({ where: { userId: user.sub }, update: {}, create: { userId: user.sub } }); }
+  updatePreferences(user: AuthUser, dto: UpdatePreferencesDto) { return this.db.userPreference.upsert({ where: { userId: user.sub }, update: dto, create: { userId: user.sub, ...dto } }); }
+
+  messageContacts(user: AuthUser) {
+    return this.db.user.findMany({ where: { active: true, id: { not: user.sub }, presence: { is: { room: { not: 'OFFLINE' } } } }, select: { id: true, displayName: true, jobTitle: true, presence: true }, orderBy: { displayName: 'asc' } });
+  }
+  async messages(user: AuthUser, otherUserId: string) {
+    const contact = await this.db.user.findFirst({ where: { id: otherUserId, active: true, ...(user.role === Role.HR ? {} : { teamId: user.teamId ?? '__none__' }) }, select: { id: true } });
+    if (!contact) throw new NotFoundException('Contact not found');
+    await this.db.directMessage.updateMany({ where: { senderId: otherUserId, recipientId: user.sub, readAt: null }, data: { readAt: new Date() } });
+    return this.db.directMessage.findMany({ where: { OR: [{ senderId: user.sub, recipientId: otherUserId }, { senderId: otherUserId, recipientId: user.sub }] }, orderBy: { createdAt: 'asc' }, take: 200 });
+  }
+  async sendMessage(user: AuthUser, dto: SendMessageDto) {
+    const contact = await this.db.user.findFirst({ where: { id: dto.recipientId, active: true, ...(user.role === Role.HR ? {} : { teamId: user.teamId ?? '__none__' }) }, select: { id: true } });
+    if (!contact) throw new NotFoundException('Contact not found');
+    const message = await this.db.directMessage.create({ data: { senderId: user.sub, recipientId: dto.recipientId, body: dto.body.trim() } });
+    await this.notify([dto.recipientId], `New message from ${user.displayName}`, dto.body.trim().slice(0, 120));
+    return message;
+  }
 }

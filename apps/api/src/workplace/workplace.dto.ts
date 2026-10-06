@@ -1,5 +1,5 @@
 import { ApprovalDecision, AudienceType, LeaveType, OfficeRoom, Priority, Role, WorkMode } from '@prisma/client';
-import { ArrayMinSize, IsArray, IsDateString, IsEmail, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CheckInDto {
   @IsEnum(WorkMode) workMode!: WorkMode;
@@ -47,7 +47,24 @@ export class CreateEmployeeDto {
   @IsEmail() email!: string;
   @IsString() @MinLength(8) password!: string;
   @IsString() @IsNotEmpty() displayName!: string;
+  @IsOptional() @IsString() jobTitle?: string;
   @IsEnum(Role) role!: Role;
   @IsString() departmentId!: string;
   @IsOptional() @IsString() teamId?: string;
+}
+
+export class UpdateProfileDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) displayName!: string;
+  @IsOptional() @IsString() @MaxLength(100) jobTitle?: string;
+}
+
+export class UpdatePreferencesDto {
+  @IsBoolean() emailNotifications!: boolean;
+  @IsString() @IsNotEmpty() language!: string;
+  @IsString() @IsNotEmpty() theme!: string;
+}
+
+export class SendMessageDto {
+  @IsString() @IsNotEmpty() recipientId!: string;
+  @IsString() @IsNotEmpty() @MaxLength(2000) body!: string;
 }

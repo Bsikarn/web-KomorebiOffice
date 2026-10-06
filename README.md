@@ -20,11 +20,7 @@ Requirements: Node.js 22+, pnpm 11+, Docker Desktop.
 4. Start both apps: `pnpm dev`
 5. Open `http://localhost:3000`
 
-Demo password for every seeded account: `Demo1234!`
-
-- Employee: `demo@komorebi.local`
-- Team Leader: `leader@komorebi.local`
-- HR: `hr@komorebi.local`
+Demo password for every seeded account: `Demo1234!`. See [`docs/ACCOUNTS.md`](docs/ACCOUNTS.md) for the complete account list and [`docs/README.md`](docs/README.md) for the full project handoff.
 
 ## Verification
 

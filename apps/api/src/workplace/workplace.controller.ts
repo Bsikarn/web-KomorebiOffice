@@ -9,7 +9,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import type { AuthUser } from '../auth/auth.types';
-import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SubmitTaskDto } from './workplace.dto';
+import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto } from './workplace.dto';
 import { WorkplaceService } from './workplace.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,6 +18,7 @@ export class WorkplaceController {
   constructor(private readonly service: WorkplaceService) {}
 
   @Get('attendance') attendance(@CurrentUser() user: AuthUser) { return this.service.attendance(user); }
+  @Get('attendance/calendar') attendanceCalendar(@CurrentUser() user: AuthUser, @Query('month') month?: string) { return this.service.attendanceCalendar(user, month); }
   @Post('attendance/check-in')
   @UseInterceptors(FileInterceptor('photo', { limits: { fileSize: 5 * 1024 * 1024 } }))
   async checkIn(@CurrentUser() user: AuthUser, @Body() dto: CheckInDto, @UploadedFile() photo?: { buffer: Buffer; mimetype: string }) {
@@ -35,6 +36,7 @@ export class WorkplaceController {
   @Post('attendance/check-out') checkOut(@CurrentUser() user: AuthUser) { return this.service.checkOut(user); }
 
   @Get('leaves') leaves(@CurrentUser() user: AuthUser) { return this.service.leaves(user); }
+  @Get('leaves/balances') leaveBalances(@CurrentUser() user: AuthUser) { return this.service.leaveBalances(user); }
   @Post('leaves') createLeave(@CurrentUser() user: AuthUser, @Body() dto: CreateLeaveDto) { return this.service.createLeave(user, dto); }
   @Roles(Role.TEAM_LEADER, Role.HR) @Get('approvals/leaves') leaveApprovals(@CurrentUser() user: AuthUser) { return this.service.leaveApprovals(user); }
   @Roles(Role.TEAM_LEADER, Role.HR) @Patch('approvals/leaves/:id') reviewLeave(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReviewDto) { return this.service.reviewLeave(user, id, dto); }
@@ -55,4 +57,13 @@ export class WorkplaceController {
   @Patch('notifications/:id/read') markNotification(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.markNotification(user, id); }
   @Get('office/presence') presence() { return this.service.presence(); }
   @Patch('office/presence') updatePresence(@CurrentUser() user: AuthUser, @Body() dto: PresenceDto) { return this.service.updatePresence(user, dto); }
+  @Get('office/spaces') meetingSpaces() { return this.service.meetingSpaces(); }
+  @Get('dashboard') dashboard(@CurrentUser() user: AuthUser) { return this.service.dashboard(user); }
+  @Get('profile') profile(@CurrentUser() user: AuthUser) { return this.service.profile(user); }
+  @Patch('profile') updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) { return this.service.updateProfile(user, dto); }
+  @Get('preferences') preferences(@CurrentUser() user: AuthUser) { return this.service.preferences(user); }
+  @Patch('preferences') updatePreferences(@CurrentUser() user: AuthUser, @Body() dto: UpdatePreferencesDto) { return this.service.updatePreferences(user, dto); }
+  @Get('messages/contacts') messageContacts(@CurrentUser() user: AuthUser) { return this.service.messageContacts(user); }
+  @Get('messages/:userId') messages(@CurrentUser() user: AuthUser, @Param('userId') userId: string) { return this.service.messages(user, userId); }
+  @Post('messages') sendMessage(@CurrentUser() user: AuthUser, @Body() dto: SendMessageDto) { return this.service.sendMessage(user, dto); }
 }

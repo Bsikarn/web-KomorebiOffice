@@ -39,5 +39,12 @@ export class AuthService {
       },
     };
   }
+
+  me(userId: string) {
+    return this.prisma.user.findUniqueOrThrow({
+      where: { id: userId, active: true },
+      select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: { select: { id: true, name: true } }, team: { select: { id: true, name: true } } },
+    });
+  }
 }
 

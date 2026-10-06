@@ -84,28 +84,73 @@ model Team {
 }
 
 model User {
-  id              String             @id @default(cuid())
-  email           String             @unique
-  passwordHash    String
-  displayName     String
-  role            Role               @default(EMPLOYEE)
-  departmentId    String
-  teamId          String?
-  active          Boolean            @default(true)
-  department      Department         @relation(fields: [departmentId], references: [id])
-  team            Team?              @relation(fields: [teamId], references: [id])
-  attendances     Attendance[]
-  leaveRequests   LeaveRequest[]     @relation("LeaveRequester")
-  leaveReviews    LeaveApproval[]    @relation("LeaveReviewer")
-  tasksCreated    Task[]             @relation("TaskCreator")
-  taskAssignments TaskAssignee[]
-  taskSubmissions TaskSubmission[]   @relation("TaskSubmitter")
-  taskReviews     TaskApproval[]     @relation("TaskReviewer")
-  announcements   Announcement[]     @relation("AnnouncementAuthor")
-  notifications   Notification[]
-  presence        OfficePresence?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id               String           @id @default(cuid())
+  email            String           @unique
+  passwordHash     String
+  displayName      String
+  jobTitle         String?
+  role             Role             @default(EMPLOYEE)
+  departmentId     String
+  teamId           String?
+  active           Boolean          @default(true)
+  department       Department       @relation(fields: [departmentId], references: [id])
+  team             Team?            @relation(fields: [teamId], references: [id])
+  attendances      Attendance[]
+  leaveRequests    LeaveRequest[]   @relation("LeaveRequester")
+  leaveReviews     LeaveApproval[]  @relation("LeaveReviewer")
+  tasksCreated     Task[]           @relation("TaskCreator")
+  taskAssignments  TaskAssignee[]
+  taskSubmissions  TaskSubmission[] @relation("TaskSubmitter")
+  taskReviews      TaskApproval[]   @relation("TaskReviewer")
+  announcements    Announcement[]   @relation("AnnouncementAuthor")
+  notifications    Notification[]
+  presence         OfficePresence?
+  preference       UserPreference?
+  leaveAllowances  LeaveAllowance[]
+  messagesSent     DirectMessage[]  @relation("MessageSender")
+  messagesReceived DirectMessage[]  @relation("MessageRecipient")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model UserPreference {
+  userId             String  @id
+  emailNotifications Boolean @default(true)
+  language           String  @default("English")
+  theme              String  @default("komorebi-light")
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LeaveAllowance {
+  id        String    @id @default(cuid())
+  userId    String
+  type      LeaveType
+  allowance Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+}
+
+model DirectMessage {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  sender      User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User      @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, senderId, createdAt])
+}
+
+model MeetingSpace {
+  id          String     @id @default(cuid())
+  room        OfficeRoom @unique
+  name        String
+  externalUrl String
+  active      Boolean    @default(true)
 }
 
 model Attendance {
@@ -117,6 +162,7 @@ model Attendance {
   checkedIn  DateTime         @default(now())
   checkedOut DateTime?
   user       User             @relation(fields: [userId], references: [id])
+
   @@index([userId, checkedIn])
 }
 
@@ -136,37 +182,38 @@ model LeaveRequest {
 }
 
 model LeaveApproval {
-  id        String           @id @default(cuid())
-  requestId String
-  reviewerId String
+  id           String           @id @default(cuid())
+  requestId    String
+  reviewerId   String
   reviewerRole Role
-  decision  ApprovalDecision
-  note      String?
-  request   LeaveRequest     @relation(fields: [requestId], references: [id])
-  reviewer  User             @relation("LeaveReviewer", fields: [reviewerId], references: [id])
-  createdAt DateTime         @default(now())
+  decision     ApprovalDecision
+  note         String?
+  request      LeaveRequest     @relation(fields: [requestId], references: [id])
+  reviewer     User             @relation("LeaveReviewer", fields: [reviewerId], references: [id])
+  createdAt    DateTime         @default(now())
 }
 
 model Task {
-  id          String          @id @default(cuid())
+  id          String           @id @default(cuid())
   title       String
   description String
-  priority    Priority        @default(MEDIUM)
-  status      TaskStatus      @default(TODO)
+  priority    Priority         @default(MEDIUM)
+  status      TaskStatus       @default(TODO)
   dueAt       DateTime?
   createdById String
-  createdBy   User            @relation("TaskCreator", fields: [createdById], references: [id])
+  createdBy   User             @relation("TaskCreator", fields: [createdById], references: [id])
   assignees   TaskAssignee[]
   submissions TaskSubmission[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 }
 
 model TaskAssignee {
   taskId String
   userId String
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user   User @relation(fields: [userId], references: [id])
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
   @@id([taskId, userId])
 }
 
@@ -213,13 +260,13 @@ model AnnouncementAudience {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   title     String
   body      String
   readAt    DateTime?
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+  createdAt DateTime  @default(now())
 }
 
 model OfficePresence {
