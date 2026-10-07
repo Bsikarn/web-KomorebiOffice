@@ -20,7 +20,7 @@ const demoPassword='Demo1234!';
 type AnnouncementNote=[string,string,string,string,string];
 
 async function apiRequest<T>(path:string, init:RequestInit={}) {
-  const token=localStorage.getItem('komorebi-token');
+  const token=sessionStorage.getItem('komorebi-token');
   const headers=new Headers(init.headers);
   if(token)headers.set('Authorization',`Bearer ${token}`);
   if(init.body&&!(init.body instanceof FormData))headers.set('Content-Type','application/json');
@@ -31,7 +31,7 @@ async function apiRequest<T>(path:string, init:RequestInit={}) {
 
 type RealtimeEvent={resource:string;title?:string;body?:string};
 async function readRealtime(signal:AbortSignal,onEvent:(event:RealtimeEvent)=>void){
-  const token=localStorage.getItem('komorebi-token');
+  const token=sessionStorage.getItem('komorebi-token');
   const response=await fetch('/api/events',{headers:{Authorization:`Bearer ${token}`},signal,cache:'no-store'});
   if(!response.ok||!response.body)throw new Error('Realtime connection unavailable');
   const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';
@@ -69,7 +69,7 @@ export function KomorebiApp() {
   const next = pages[(index + 1) % pages.length];
   const go = (id: PageId) => { setPage(id); setMenu(false); setNotices(false); window.scrollTo({top:0,behavior:'smooth'}); };
   const finishDrag = () => { const distance=dragValue.current;if (distance > 45) go(previous[0]); else if (distance < -45) go(next[0]);didDrag.current=Math.abs(distance)>5;dragStart.current=null;dragValue.current=0;setDrag(0);setDragging(false);window.setTimeout(()=>{didDrag.current=false},0); };
-  useEffect(()=>{const token=localStorage.getItem('komorebi-token');if(!token){queueMicrotask(()=>setBooting(false));return}apiRequest<{role:'EMPLOYEE'|'TEAM_LEADER'|'HR'}>('/auth/me').then(user=>setRole(user.role==='TEAM_LEADER'?'leader':user.role==='HR'?'hr':'employee')).catch(()=>localStorage.removeItem('komorebi-token')).finally(()=>setBooting(false))},[]);
+  useEffect(()=>{const legacyToken=localStorage.getItem('komorebi-token');if(legacyToken&&!sessionStorage.getItem('komorebi-token'))sessionStorage.setItem('komorebi-token',legacyToken);localStorage.removeItem('komorebi-token');const token=sessionStorage.getItem('komorebi-token');if(!token){queueMicrotask(()=>setBooting(false));return}apiRequest<{role:'EMPLOYEE'|'TEAM_LEADER'|'HR'}>('/auth/me').then(user=>setRole(user.role==='TEAM_LEADER'?'leader':user.role==='HR'?'hr':'employee')).catch(()=>sessionStorage.removeItem('komorebi-token')).finally(()=>setBooting(false))},[]);
   useEffect(()=>{if(!role)return;const load=()=>apiRequest<Array<{status:string;workMode:'OFFICE'|'WFH'}>>('/attendance').then(rows=>{const active=rows.find(x=>x.status==='WORKING');setCheckedIn(Boolean(active));if(active)setMode(active.workMode==='OFFICE'?'office':'wfh')}).catch(()=>undefined);const realtime=(event:Event)=>{if((event as CustomEvent<RealtimeEvent>).detail?.resource==='attendance')void load()};void load();window.addEventListener('komorebi:realtime',realtime);return()=>window.removeEventListener('komorebi:realtime',realtime)},[role]);
   useEffect(()=>{if(!role)return;const load=()=>apiRequest<Array<{title:string;body:string;createdAt:string;author:{displayName:string}}>>('/announcements').then(data=>setAnnouncementNotes(data.map((x,i)=>[x.title,x.body,['yellow','blue','green'][i%3],x.author.displayName,x.createdAt]))).catch(()=>setAnnouncementNotes([]));const realtime=(event:Event)=>{if((event as CustomEvent<RealtimeEvent>).detail?.resource==='announcements')void load()};void load();window.addEventListener('komorebi:announcements',load);window.addEventListener('komorebi:realtime',realtime);return()=>{window.removeEventListener('komorebi:announcements',load);window.removeEventListener('komorebi:realtime',realtime)}},[role]);
   useEffect(()=>{if(!role)return;let stopped=false;const controller=new AbortController();void apiRequest<{emailNotifications:boolean}>('/preferences').then(x=>{browserNotices.current=x.emailNotifications;localStorage.setItem('komorebi-browser-notifications',String(x.emailNotifications))}).catch(()=>undefined);const run=async()=>{while(!stopped){try{await readRealtime(controller.signal,event=>{window.dispatchEvent(new CustomEvent('komorebi:realtime',{detail:event}));if(event.title&&localStorage.getItem('komorebi-browser-notifications')==='true'&&'Notification'in window&&Notification.permission==='granted')new Notification(event.title,{body:event.body,tag:`komorebi-${event.resource}`})})}catch{}if(!stopped)await new Promise(resolve=>window.setTimeout(resolve,2500))}};void run();return()=>{stopped=true;controller.abort()}},[role]);
@@ -94,7 +94,7 @@ export function KomorebiApp() {
         </div>
         <button className="icon-button notification-trigger" onClick={()=>{setNotices(!notices);setMenu(false)}} aria-label="Notifications">♢<i/></button>
       </nav>
-      {menu && <NavMenu role={role} pages={pages} current={page} go={go} signOut={()=>{localStorage.removeItem('komorebi-token');setMenu(false);setPage('dashboard');setRole(null)}} />}
+      {menu && <NavMenu role={role} pages={pages} current={page} go={go} signOut={()=>{sessionStorage.removeItem('komorebi-token');setMenu(false);setPage('dashboard');setRole(null)}} />}
       {notices && <Notifications />}
     </header>
     {menu && <button className="menu-scrim" onClick={()=>setMenu(false)} aria-label="Close menu" />}
@@ -106,7 +106,7 @@ export function KomorebiApp() {
 function Login({onRole}:{onRole:(role:Role)=>void}) {
   const [error,setError]=useState(''); const [loading,setLoading]=useState(false);
   const enter=(nextRole:Role)=>{window.scrollTo(0,0);onRole(nextRole)};
-  async function login(email:string,password:string){setLoading(true);setError('');try{const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});if(!res.ok)throw new Error();const data=await res.json();localStorage.setItem('komorebi-token',data.accessToken);enter(data.user.role==='TEAM_LEADER'?'leader':data.user.role==='HR'?'hr':'employee')}catch{setError('Unable to sign in. Please check your details.')}finally{setLoading(false)}}
+  async function login(email:string,password:string){setLoading(true);setError('');try{const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});if(!res.ok)throw new Error();const data=await res.json();sessionStorage.setItem('komorebi-token',data.accessToken);enter(data.user.role==='TEAM_LEADER'?'leader':data.user.role==='HR'?'hr':'employee')}catch{setError('Unable to sign in. Please check your details.')}finally{setLoading(false)}}
   const submit=(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();const data=new FormData(e.currentTarget);void login(String(data.get('email')),String(data.get('password')))};
   return <main className="login-view"><div className="ambient"/><div className="login-wrap"><div className="brand"><span className="brand-mark">⌁</span>Komorebi Office</div><section className="glass login-card"><div className="welcome-mark">⌁</div><h1>Welcome back</h1><p className="muted center">Sign in to start your workday.</p><form onSubmit={submit}><label className="field">Email<input name="email" type="email" placeholder="you@company.com" required/></label><label className="field">Password<input name="password" type="password" minLength={8} placeholder="Enter your password" required/></label><button className="button primary wide" disabled={loading}>{loading?'Signing in…':'Sign In'}</button><p className="form-message">{error}</p></form><div className="demo-divider"><span>Real demo accounts</span></div><div className="demo-account-list">{demoAccounts.map(([name,email,role])=><button key={email} className={`demo-account ${role}`} onClick={()=>void login(email,demoPassword)}><span className="avatar mini">{name[0]}</span><span><strong>{name}</strong><small>{roleName(role)} · {email}</small></span></button>)}</div><p className="tiny center">All accounts use the demo password shown in the project documentation.</p></section></div></main>;
 }
@@ -220,7 +220,7 @@ function Employees(){
 function Profile({role}:{role:Role}){
   type ProfileData={email:string;displayName:string;jobTitle:string|null;role:string;department:{name:string};team:{name:string}|null;avatarUpdatedAt:string|null};
   const [profile,setProfile]=useState<ProfileData|null>(null);const [name,setName]=useState('');const [avatar,setAvatar]=useState<File|null>(null);const [avatarUrl,setAvatarUrl]=useState('');const [editing,setEditing]=useState(false);const [saving,setSaving]=useState(false);const [message,setMessage]=useState('');
-  const loadAvatar=async(updated:string|null)=>{if(!updated){setAvatarUrl('');return}const token=localStorage.getItem('komorebi-token');const response=await fetch('/api/profile/avatar',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});if(!response.ok)return;const url=URL.createObjectURL(await response.blob());setAvatarUrl(current=>{if(current)URL.revokeObjectURL(current);return url})};
+  const loadAvatar=async(updated:string|null)=>{if(!updated){setAvatarUrl('');return}const token=sessionStorage.getItem('komorebi-token');const response=await fetch('/api/profile/avatar',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});if(!response.ok)return;const url=URL.createObjectURL(await response.blob());setAvatarUrl(current=>{if(current)URL.revokeObjectURL(current);return url})};
   useEffect(()=>{apiRequest<ProfileData>('/profile').then(data=>{setProfile(data);setName(data.displayName);void loadAvatar(data.avatarUpdatedAt)}).catch(()=>setProfile(null));return()=>{if(avatarUrl)URL.revokeObjectURL(avatarUrl)}},[]);
   const save=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();if(!name.trim())return;setSaving(true);setMessage('');const form=new FormData();form.set('displayName',name.trim());if(avatar)form.set('avatar',avatar);try{const updated=await apiRequest<ProfileData>('/profile',{method:'PATCH',body:form});setProfile(updated);setName(updated.displayName);setAvatar(null);setEditing(false);setMessage('Profile saved to the database.');await loadAvatar(updated.avatarUpdatedAt)}catch(ex){setMessage(ex instanceof Error?ex.message:'Unable to save profile')}finally{setSaving(false)}};
   if(!profile)return <section className="card detail-card"><p className="empty-people">Profile data is unavailable.</p></section>;

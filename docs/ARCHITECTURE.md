@@ -11,7 +11,7 @@ Browser
 
 ## Components
 
-- `apps/web`: Next.js 16, React 19, TypeScript. Interactive client application; JWT is sent as a Bearer token to same-origin `/api`.
+- `apps/web`: Next.js 16, React 19, TypeScript. Interactive client application; JWT is stored in per-tab `sessionStorage` and sent as a Bearer token to same-origin `/api`. This allows independent Employee, Team Leader, and HR sessions in separate tabs.
 - `apps/api`: NestJS REST API. Validation, authentication, role guards, business rules, notifications, and persistence.
 - PostgreSQL: source of truth for all user-visible business data.
 - Prisma: schema, migrations, generated client, and demonstration seed.
