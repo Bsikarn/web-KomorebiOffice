@@ -3,7 +3,7 @@ import { ApprovalDecision, AudienceType, LeaveStatus, Role, TaskStatus, WorkMode
 import * as argon2 from 'argon2';
 import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../database/prisma.service';
-import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto } from './workplace.dto';
+import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto, UpdateTaskStatusDto } from './workplace.dto';
 import { RealtimeService } from './realtime.service';
 
 @Injectable()
@@ -118,6 +118,16 @@ export class WorkplaceService {
     return task;
   }
 
+  async updateTaskStatus(user: AuthUser, taskId: string, dto: UpdateTaskStatusDto) {
+    if (dto.status !== TaskStatus.IN_PROGRESS) throw new BadRequestException('Only starting a task is supported here');
+    const assignment = await this.db.taskAssignee.findUnique({ where: { taskId_userId: { taskId, userId: user.sub } }, include: { task: true } });
+    if (!assignment) throw new ForbiddenException('This task is not assigned to you');
+    if (assignment.task.status !== TaskStatus.TODO) throw new BadRequestException('Only a to-do task can be started');
+    const task = await this.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS }, include: { assignees: { include: { user: { select: { id: true, displayName: true } } } } } });
+    this.realtime?.emit([user.sub, task.createdById], { resource: 'tasks' });
+    return task;
+  }
+
   async submitTask(user: AuthUser, taskId: string, dto: SubmitTaskDto) {
     const assignment = await this.db.taskAssignee.findUnique({ where: { taskId_userId: { taskId, userId: user.sub } }, include: { task: true } });
     if (!assignment) throw new ForbiddenException();
@@ -183,7 +193,7 @@ export class WorkplaceService {
   presence() { return this.db.officePresence.findMany({ where: { room: { not: 'OFFLINE' } }, include: { user: { select: { id: true, displayName: true, role: true } } } }); }
   async updatePresence(user: AuthUser, dto: PresenceDto) {
     const presence = await this.db.officePresence.upsert({ where: { userId: user.sub }, create: { userId: user.sub, room: dto.room, x: dto.x ?? 50, y: dto.y ?? 50 }, update: { room: dto.room, x: dto.x ?? 50, y: dto.y ?? 50 } });
-    this.realtime?.emit(await this.activeUserIds(), { resource: 'presence' });
+    this.realtime?.emit(await this.activeUserIds(), { resource: 'presence', presence: { userId: user.sub, room: presence.room, x: presence.x, y: presence.y, displayName: user.displayName } });
     return presence;
   }
   meetingSpaces() { return this.db.meetingSpace.findMany({ where: { active: true }, orderBy: { name: 'asc' } }); }
@@ -215,13 +225,13 @@ export class WorkplaceService {
     return this.db.user.findMany({ where: { active: true, id: { not: user.sub }, presence: { is: { room: { not: 'OFFLINE' } } } }, select: { id: true, displayName: true, jobTitle: true, presence: true }, orderBy: { displayName: 'asc' } });
   }
   async messages(user: AuthUser, otherUserId: string) {
-    const contact = await this.db.user.findFirst({ where: { id: otherUserId, active: true, ...(user.role === Role.HR ? {} : { teamId: user.teamId ?? '__none__' }) }, select: { id: true } });
+    const contact = await this.db.user.findFirst({ where: { id: otherUserId, active: true }, select: { id: true } });
     if (!contact) throw new NotFoundException('Contact not found');
     await this.db.directMessage.updateMany({ where: { senderId: otherUserId, recipientId: user.sub, readAt: null }, data: { readAt: new Date() } });
     return this.db.directMessage.findMany({ where: { OR: [{ senderId: user.sub, recipientId: otherUserId }, { senderId: otherUserId, recipientId: user.sub }] }, orderBy: { createdAt: 'asc' }, take: 200 });
   }
   async sendMessage(user: AuthUser, dto: SendMessageDto) {
-    const contact = await this.db.user.findFirst({ where: { id: dto.recipientId, active: true, ...(user.role === Role.HR ? {} : { teamId: user.teamId ?? '__none__' }) }, select: { id: true } });
+    const contact = await this.db.user.findFirst({ where: { id: dto.recipientId, active: true }, select: { id: true } });
     if (!contact) throw new NotFoundException('Contact not found');
     const message = await this.db.directMessage.create({ data: { senderId: user.sub, recipientId: dto.recipientId, body: dto.body.trim() } });
     await this.notify([dto.recipientId], `New message from ${user.displayName}`, dto.body.trim().slice(0, 120));

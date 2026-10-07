@@ -10,7 +10,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import type { AuthUser } from '../auth/auth.types';
 import type { Response } from 'express';
-import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto } from './workplace.dto';
+import { CheckInDto, CreateAnnouncementDto, CreateEmployeeDto, CreateLeaveDto, CreateTaskDto, PresenceDto, ReviewDto, SendMessageDto, SubmitTaskDto, UpdatePreferencesDto, UpdateProfileDto, UpdateTaskStatusDto } from './workplace.dto';
 import { WorkplaceService } from './workplace.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -44,6 +44,7 @@ export class WorkplaceController {
 
   @Get('tasks') tasks(@CurrentUser() user: AuthUser) { return this.service.tasks(user); }
   @Roles(Role.TEAM_LEADER, Role.HR) @Post('tasks') createTask(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) { return this.service.createTask(user, dto); }
+  @Patch('tasks/:id/status') updateTaskStatus(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateTaskStatusDto) { return this.service.updateTaskStatus(user, id, dto); }
   @Post('tasks/:id/submit') submitTask(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SubmitTaskDto) { return this.service.submitTask(user, id, dto); }
   @Roles(Role.TEAM_LEADER, Role.HR) @Get('approvals/tasks') taskApprovals(@CurrentUser() user: AuthUser) { return this.service.taskApprovals(user); }
   @Roles(Role.TEAM_LEADER, Role.HR) @Patch('approvals/tasks/:id') reviewTask(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReviewDto) { return this.service.reviewTask(user, id, dto); }

@@ -5,6 +5,7 @@ export type RealtimePayload = {
   resource: 'announcements' | 'attendance' | 'messages' | 'notifications' | 'presence' | 'profile' | 'tasks' | 'leaves' | 'approvals' | 'team' | 'employees';
   title?: string;
   body?: string;
+  presence?: { userId: string; room: 'WORK_AREA' | 'MEETING_A' | 'MEETING_B' | 'LOUNGE' | 'OFFLINE'; x: number; y: number; displayName: string };
 };
 
 @Injectable()

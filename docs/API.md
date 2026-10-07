@@ -26,6 +26,7 @@ All routes except login and health require `Authorization: Bearer <JWT>`.
 
 - `GET /tasks`
 - `POST /tasks` — Team Leader or HR
+- `PATCH /tasks/:id/status` — an assignee starts a to-do task
 - `POST /tasks/:id/submit`
 - `GET|PATCH /approvals/tasks/:id` — Team Leader or HR
 - `GET /announcements`

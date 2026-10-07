@@ -1,4 +1,4 @@
-import { ApprovalDecision, AudienceType, LeaveType, OfficeRoom, Priority, Role, WorkMode } from '@prisma/client';
+import { ApprovalDecision, AudienceType, LeaveType, OfficeRoom, Priority, Role, TaskStatus, WorkMode } from '@prisma/client';
 import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CheckInDto {
@@ -28,6 +28,7 @@ export class CreateTaskDto {
 }
 
 export class SubmitTaskDto { @IsString() @IsNotEmpty() note!: string; }
+export class UpdateTaskStatusDto { @IsEnum(TaskStatus) status!: TaskStatus; }
 
 export class CreateAnnouncementDto {
   @IsString() @IsNotEmpty() title!: string;

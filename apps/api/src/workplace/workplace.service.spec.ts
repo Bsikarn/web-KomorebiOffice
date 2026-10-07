@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { Role, WorkMode } from '@prisma/client';
+import { Role, TaskStatus, WorkMode } from '@prisma/client';
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 import type { AuthUser } from '../auth/auth.types';
@@ -57,5 +57,16 @@ describe('WorkplaceService persisted business data', () => {
     assert.deepEqual(await service.sendMessage(user, { recipientId: 'u2', body: ' Hello ' }), created);
     assert.equal(savedBody, 'Hello');
     assert.equal(db.notification.createMany.mock.callCount(), 1);
+  });
+
+  it('lets an assignee start a to-do task', async () => {
+    const updated = { id: 'task-1', status: TaskStatus.IN_PROGRESS, createdById: 'leader-1', assignees: [] };
+    const db = {
+      taskAssignee: { findUnique: mock.fn(async () => ({ task: { id: 'task-1', status: TaskStatus.TODO } })) },
+      task: { update: mock.fn(async () => updated) },
+    };
+    const service = new WorkplaceService(db as never);
+    assert.deepEqual(await service.updateTaskStatus(user, 'task-1', { status: TaskStatus.IN_PROGRESS }), updated);
+    assert.equal(db.task.update.mock.callCount(), 1);
   });
 });
