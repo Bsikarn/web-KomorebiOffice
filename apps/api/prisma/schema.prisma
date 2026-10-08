@@ -89,6 +89,7 @@ model User {
   passwordHash     String
   displayName      String
   jobTitle         String?
+  phoneNumber      String?
   avatarData       Bytes?
   avatarMime       String?
   avatarUpdatedAt  DateTime?
@@ -197,18 +198,19 @@ model LeaveApproval {
 }
 
 model Task {
-  id          String           @id @default(cuid())
-  title       String
-  description String
-  priority    Priority         @default(MEDIUM)
-  status      TaskStatus       @default(TODO)
-  dueAt       DateTime?
-  createdById String
-  createdBy   User             @relation("TaskCreator", fields: [createdById], references: [id])
-  assignees   TaskAssignee[]
-  submissions TaskSubmission[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  title          String
+  description    String
+  responsibility String?
+  priority       Priority         @default(MEDIUM)
+  status         TaskStatus       @default(TODO)
+  dueAt          DateTime?
+  createdById    String
+  createdBy      User             @relation("TaskCreator", fields: [createdById], references: [id])
+  assignees      TaskAssignee[]
+  submissions    TaskSubmission[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 }
 
 model TaskAssignee {
@@ -263,13 +265,15 @@ model AnnouncementAudience {
 }
 
 model Notification {
-  id        String    @id @default(cuid())
-  userId    String
-  title     String
-  body      String
-  readAt    DateTime?
-  user      User      @relation(fields: [userId], references: [id])
-  createdAt DateTime  @default(now())
+  id             String    @id @default(cuid())
+  userId         String
+  title          String
+  body           String
+  actionType     String?
+  actionTargetId String?
+  readAt         DateTime?
+  user           User      @relation(fields: [userId], references: [id])
+  createdAt      DateTime  @default(now())
 }
 
 model OfficePresence {

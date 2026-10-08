@@ -16,11 +16,11 @@ export class WorkplaceService {
     return (await this.db.user.findMany({ where: { active: true }, select: { id: true } })).map(user => user.id);
   }
 
-  private async notify(userIds: string[], title: string, body: string) {
+  private async notify(userIds: string[], title: string, body: string, action?: { type: string; targetId?: string }) {
     if (!userIds.length) return;
     const recipients = [...new Set(userIds)];
-    await this.db.notification.createMany({ data: recipients.map(userId => ({ userId, title, body })) });
-    this.realtime?.emit(recipients, { resource: 'notifications', title, body });
+    await this.db.notification.createMany({ data: recipients.map(userId => ({ userId, title, body, actionType: action?.type, actionTargetId: action?.targetId })) });
+    this.realtime?.emit(recipients, { resource: 'notifications', title, body, actionType: action?.type, actionTargetId: action?.targetId });
   }
 
   attendance(user: AuthUser) {
@@ -94,12 +94,14 @@ export class WorkplaceService {
       this.db.leaveApproval.create({ data: { requestId: id, reviewerId: user.sub, reviewerRole: user.role, decision: dto.decision, note: dto.note } }),
       this.db.leaveRequest.update({ where: { id }, data: { status } }),
     ]);
+    let nextReviewerIds: string[] = [];
     if (status === LeaveStatus.PENDING_HR) {
       const hrs = await this.db.user.findMany({ where: { role: Role.HR, active: true }, select: { id: true } });
-      await this.notify(hrs.map(x => x.id), 'HR leave approval needed', `${request.user.displayName}'s leave passed Team Leader review.`);
+      nextReviewerIds = hrs.map(x => x.id);
+      await this.notify(nextReviewerIds, 'HR leave approval needed', `${request.user.displayName}'s leave passed Team Leader review.`);
     }
     await this.notify([request.userId], 'Leave request updated', `Your leave request is now ${status.toLowerCase().replaceAll('_', ' ')}.`);
-    this.realtime?.emit([request.userId, user.sub], { resource: 'approvals' });
+    this.realtime?.emit([request.userId, user.sub, ...nextReviewerIds], { resource: 'approvals' });
     return updated;
   }
 
@@ -109,13 +111,15 @@ export class WorkplaceService {
   }
 
   async createTask(user: AuthUser, dto: CreateTaskDto) {
-    const assignees = await this.db.user.findMany({ where: { id: { in: dto.assigneeIds }, active: true } });
-    if (assignees.length !== new Set(dto.assigneeIds).size) throw new BadRequestException('One or more assignees are invalid');
+    const assigneeIds = dto.assignments.map(item => item.userId);
+    if (new Set(assigneeIds).size !== assigneeIds.length) throw new BadRequestException('Each teammate can only be assigned once');
+    const assignees = await this.db.user.findMany({ where: { id: { in: assigneeIds }, active: true } });
+    if (assignees.length !== assigneeIds.length) throw new BadRequestException('One or more assignees are invalid');
     if (user.role === Role.TEAM_LEADER && assignees.some(x => x.teamId !== user.teamId)) throw new ForbiddenException('Team Leaders can only assign within their team');
-    const task = await this.db.task.create({ data: { title: dto.title, description: dto.description, priority: dto.priority, dueAt: dto.dueAt ? new Date(dto.dueAt) : null, createdById: user.sub, assignees: { create: [...new Set(dto.assigneeIds)].map(userId => ({ userId })) } }, include: { assignees: true } });
-    await this.notify(dto.assigneeIds, 'New task assigned', `${user.displayName} assigned “${dto.title}”.`);
-    this.realtime?.emit([user.sub, ...dto.assigneeIds], { resource: 'tasks' });
-    return task;
+    const tasks = await this.db.$transaction(dto.assignments.map(assignment => this.db.task.create({ data: { title: dto.title, description: dto.description, responsibility: assignment.responsibility.trim(), priority: dto.priority, dueAt: dto.dueAt ? new Date(dto.dueAt) : null, createdById: user.sub, assignees: { create: [{ userId: assignment.userId }] } }, include: { assignees: true } })));
+    await Promise.all(dto.assignments.map(assignment => this.notify([assignment.userId], 'New task assigned', `${user.displayName} assigned “${dto.title}”: ${assignment.responsibility.trim()}`, { type: 'TASK', targetId: tasks.find(task => task.assignees.some(item => item.userId === assignment.userId))?.id })));
+    this.realtime?.emit([user.sub, ...assigneeIds], { resource: 'tasks' });
+    return tasks;
   }
 
   async updateTaskStatus(user: AuthUser, taskId: string, dto: UpdateTaskStatusDto) {
@@ -174,8 +178,8 @@ export class WorkplaceService {
     return announcement;
   }
 
-  team(user: AuthUser) { return this.db.user.findMany({ where: { teamId: user.teamId ?? '__none__', active: true }, select: { id: true, displayName: true, jobTitle: true, role: true, department: true, presence: true, attendances: { orderBy: { checkedIn: 'desc' }, take: 1, select: { workMode: true, status: true, checkedIn: true } } } }); }
-  employees(departmentId?: string, role?: Role) { return this.db.user.findMany({ where: { active: true, departmentId: departmentId || undefined, role: role || undefined }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, presence: true }, orderBy: { displayName: 'asc' } }); }
+  team(user: AuthUser) { return this.db.user.findMany({ where: { teamId: user.teamId ?? '__none__', active: true }, select: { id: true, displayName: true, jobTitle: true, phoneNumber: true, role: true, department: true, presence: true, attendances: { orderBy: { checkedIn: 'desc' }, take: 1, select: { workMode: true, status: true, checkedIn: true } } } }); }
+  employees(departmentId?: string, role?: Role) { return this.db.user.findMany({ where: { active: true, departmentId: departmentId || undefined, role: role || undefined }, select: { id: true, email: true, displayName: true, jobTitle: true, phoneNumber: true, role: true, department: true, team: true, presence: true }, orderBy: { displayName: 'asc' } }); }
   async createEmployee(dto: CreateEmployeeDto) {
     const passwordHash = await argon2.hash(dto.password);
     const created = await this.db.$transaction(async db => {
@@ -211,10 +215,11 @@ export class WorkplaceService {
     return { dueTasks, highPriority, teamWfh: teamWfh.map(row => row.user) };
   }
 
-  profile(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, avatarUpdatedAt: true } }); }
+  profile(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { id: true, email: true, displayName: true, jobTitle: true, phoneNumber: true, role: true, department: true, team: true, avatarUpdatedAt: true } }); }
   profileAvatar(user: AuthUser) { return this.db.user.findUniqueOrThrow({ where: { id: user.sub }, select: { avatarData: true, avatarMime: true } }); }
   async updateProfile(user: AuthUser, dto: UpdateProfileDto, avatar?: { buffer: Buffer; mimetype: string }) {
-    const updated = await this.db.user.update({ where: { id: user.sub }, data: { displayName: dto.displayName.trim(), ...(avatar ? { avatarData: Uint8Array.from(avatar.buffer), avatarMime: avatar.mimetype, avatarUpdatedAt: new Date() } : {}) }, select: { id: true, email: true, displayName: true, jobTitle: true, role: true, department: true, team: true, avatarUpdatedAt: true } });
+    const phoneNumber = dto.phoneNumber?.trim() || null;
+    const updated = await this.db.user.update({ where: { id: user.sub }, data: { displayName: dto.displayName.trim(), phoneNumber, ...(avatar ? { avatarData: Uint8Array.from(avatar.buffer), avatarMime: avatar.mimetype, avatarUpdatedAt: new Date() } : {}) }, select: { id: true, email: true, displayName: true, jobTitle: true, phoneNumber: true, role: true, department: true, team: true, avatarUpdatedAt: true } });
     this.realtime?.emit(await this.activeUserIds(), { resource: 'profile' });
     return updated;
   }
@@ -222,7 +227,7 @@ export class WorkplaceService {
   updatePreferences(user: AuthUser, dto: UpdatePreferencesDto) { return this.db.userPreference.upsert({ where: { userId: user.sub }, update: dto, create: { userId: user.sub, ...dto } }); }
 
   messageContacts(user: AuthUser) {
-    return this.db.user.findMany({ where: { active: true, id: { not: user.sub }, presence: { is: { room: { not: 'OFFLINE' } } } }, select: { id: true, displayName: true, jobTitle: true, presence: true }, orderBy: { displayName: 'asc' } });
+    return this.db.user.findMany({ where: { active: true, id: { not: user.sub } }, select: { id: true, displayName: true, jobTitle: true, phoneNumber: true, presence: true }, orderBy: { displayName: 'asc' } });
   }
   async messages(user: AuthUser, otherUserId: string) {
     const contact = await this.db.user.findFirst({ where: { id: otherUserId, active: true }, select: { id: true } });
@@ -234,7 +239,7 @@ export class WorkplaceService {
     const contact = await this.db.user.findFirst({ where: { id: dto.recipientId, active: true }, select: { id: true } });
     if (!contact) throw new NotFoundException('Contact not found');
     const message = await this.db.directMessage.create({ data: { senderId: user.sub, recipientId: dto.recipientId, body: dto.body.trim() } });
-    await this.notify([dto.recipientId], `New message from ${user.displayName}`, dto.body.trim().slice(0, 120));
+    await this.notify([dto.recipientId], `New message from ${user.displayName}`, dto.body.trim().slice(0, 120), { type: 'MESSAGE', targetId: user.sub });
     this.realtime?.emit([user.sub, dto.recipientId], { resource: 'messages' });
     return message;
   }

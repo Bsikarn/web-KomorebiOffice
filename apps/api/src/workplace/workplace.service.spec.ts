@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { Role, TaskStatus, WorkMode } from '@prisma/client';
+import { ApprovalDecision, LeaveStatus, Role, TaskStatus, WorkMode } from '@prisma/client';
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 import type { AuthUser } from '../auth/auth.types';
@@ -51,12 +51,29 @@ describe('WorkplaceService persisted business data', () => {
     const db = {
       user: { findFirst: mock.fn(async () => ({ id: 'u2' })) },
       directMessage: { create: mock.fn(async (input: { data: { body: string } }) => { savedBody = input.data.body; return created; }) },
-      notification: { createMany: mock.fn(async () => ({ count: 1 })) },
+      notification: { createMany: mock.fn(async (_input: { data: Array<Record<string, unknown>> }) => ({ count: 1 })) },
     };
     const service = new WorkplaceService(db as never);
     assert.deepEqual(await service.sendMessage(user, { recipientId: 'u2', body: ' Hello ' }), created);
     assert.equal(savedBody, 'Hello');
     assert.equal(db.notification.createMany.mock.callCount(), 1);
+    assert.deepEqual(db.notification.createMany.mock.calls[0].arguments[0], { data: [{ userId: 'u2', title: 'New message from Demo', body: 'Hello', actionType: 'MESSAGE', actionTargetId: 'u1' }] });
+  });
+
+  it('creates one independent task per teammate with a personal responsibility', async () => {
+    const leader: AuthUser = { sub: 'leader-1', email: 'leader@example.com', displayName: 'Lead', role: Role.TEAM_LEADER, teamId: 't1' };
+    const taskCreate = mock.fn(async (input: { data: { responsibility: string; assignees: { create: Array<{ userId: string }> } } }) => ({ id: `task-${input.data.assignees.create[0].userId}`, assignees: input.data.assignees.create, responsibility: input.data.responsibility }));
+    const db = {
+      user: { findMany: mock.fn(async () => [{ id: 'u1', teamId: 't1' }, { id: 'u2', teamId: 't1' }]) },
+      task: { create: taskCreate },
+      notification: { createMany: mock.fn(async () => ({ count: 1 })) },
+      $transaction: mock.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
+    };
+    const service = new WorkplaceService(db as never);
+    const tasks = await service.createTask(leader, { title: 'Launch', description: 'Ship the release', assignments: [{ userId: 'u1', responsibility: 'Build the UI' }, { userId: 'u2', responsibility: 'Test the API' }] });
+    assert.equal(tasks.length, 2);
+    assert.equal(taskCreate.mock.callCount(), 2);
+    assert.deepEqual(tasks.map(task => task.responsibility), ['Build the UI', 'Test the API']);
   });
 
   it('lets an assignee start a to-do task', async () => {
@@ -68,5 +85,26 @@ describe('WorkplaceService persisted business data', () => {
     const service = new WorkplaceService(db as never);
     assert.deepEqual(await service.updateTaskStatus(user, 'task-1', { status: TaskStatus.IN_PROGRESS }), updated);
     assert.equal(db.task.update.mock.callCount(), 1);
+  });
+
+  it('pushes a leader-approved leave request to HR in realtime', async () => {
+    const leader: AuthUser = { sub: 'leader-1', email: 'leader@example.com', displayName: 'Lead', role: Role.TEAM_LEADER, teamId: 't1' };
+    const emit = mock.fn();
+    const updated = { id: 'leave-1', status: LeaveStatus.PENDING_HR };
+    const db = {
+      leaveRequest: {
+        findUnique: mock.fn(async () => ({ id: 'leave-1', userId: 'u1', status: LeaveStatus.PENDING_LEADER, user: { teamId: 't1', displayName: 'Demo' } })),
+        update: mock.fn(async () => updated),
+      },
+      leaveApproval: { create: mock.fn(async () => ({ id: 'approval-1' })) },
+      user: { findMany: mock.fn(async () => [{ id: 'hr-1' }]) },
+      notification: { createMany: mock.fn(async () => ({ count: 1 })) },
+      $transaction: mock.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
+    };
+    const service = new WorkplaceService(db as never, { emit } as never);
+    assert.deepEqual(await service.reviewLeave(leader, 'leave-1', { decision: ApprovalDecision.APPROVED }), updated);
+    const approvalEvent = emit.mock.calls.find(call => (call.arguments[1] as { resource: string }).resource === 'approvals');
+    assert.ok(approvalEvent);
+    assert.deepEqual((approvalEvent.arguments[0] as string[]).sort(), ['hr-1', 'leader-1', 'u1']);
   });
 });

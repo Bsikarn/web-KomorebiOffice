@@ -3,15 +3,15 @@
 | Entity | Purpose |
 | --- | --- |
 | Department, Team | Organization structure |
-| User | Login identity, role, job title, department, team, active state |
+| User | Login identity, role, job title, optional phone number, department, team, active state |
 | UserPreference | Per-user notification, language, and theme settings |
 | Attendance | Office/WFH check-in, image reference, state, check-out time |
 | LeaveAllowance | Annual allowance per user and leave type |
 | LeaveRequest, LeaveApproval | Two-step leave workflow and reviewer notes |
-| Task, TaskAssignee | Task definition and one-to-many assignments |
+| Task, TaskAssignee | Independent per-employee task with a personal responsibility and assignee |
 | TaskSubmission, TaskApproval | Employee submission and reviewer decision |
 | Announcement, AnnouncementAudience | Posts targeted to everyone, team, or role |
-| Notification | Per-user activity notification and read state |
+| Notification | Per-user activity notification, read state, and optional typed action target |
 | OfficePresence | Current virtual room and position for each user |
 | MeetingSpace | Persisted meeting room name and external meeting URL |
 | DirectMessage | Persisted team chat messages and read state |

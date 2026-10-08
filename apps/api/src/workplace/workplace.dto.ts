@@ -1,5 +1,6 @@
 import { ApprovalDecision, AudienceType, LeaveType, OfficeRoom, Priority, Role, TaskStatus, WorkMode } from '@prisma/client';
-import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class CheckInDto {
   @IsEnum(WorkMode) workMode!: WorkMode;
@@ -19,12 +20,17 @@ export class ReviewDto {
   @IsOptional() @IsString() note?: string;
 }
 
+export class TaskAssignmentDto {
+  @IsString() @IsNotEmpty() userId!: string;
+  @IsString() @IsNotEmpty() @MaxLength(300) responsibility!: string;
+}
+
 export class CreateTaskDto {
   @IsString() @IsNotEmpty() title!: string;
   @IsString() @IsNotEmpty() description!: string;
   @IsOptional() @IsEnum(Priority) priority?: Priority;
   @IsOptional() @IsDateString() dueAt?: string;
-  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) assigneeIds!: string[];
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => TaskAssignmentDto) assignments!: TaskAssignmentDto[];
 }
 
 export class SubmitTaskDto { @IsString() @IsNotEmpty() note!: string; }
@@ -56,6 +62,7 @@ export class CreateEmployeeDto {
 
 export class UpdateProfileDto {
   @IsString() @IsNotEmpty() @MaxLength(80) displayName!: string;
+  @IsOptional() @IsString() @MaxLength(30) phoneNumber?: string;
 }
 
 export class UpdatePreferencesDto {
