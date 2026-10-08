@@ -11,6 +11,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Komorebi Office",
   description: "A calm, playful digital office for modern teams.",
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
