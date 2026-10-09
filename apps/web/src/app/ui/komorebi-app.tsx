@@ -7,8 +7,8 @@ type PageId = 'dashboard' | 'attendance' | 'tasks' | 'virtual-office' | 'leave' 
 type ModalId = 'announcement' | 'announcement-detail' | 'leave' | 'task' | 'people' | 'photo-checkin' | 'meeting-a' | 'meeting-b' | 'lounge' | 'work' | 'review-reason' | null;
 
 const basePages = [
-  ['dashboard', 'Dashboard', '⌂'], ['attendance', 'Attendance', '◷'], ['tasks', 'Tasks', '✓'],
-  ['virtual-office', 'Virtual Office', '▦'], ['leave', 'Leave', '☂'], ['team', 'Team', '♟'],
+  ['dashboard', 'Dashboard'], ['attendance', 'Attendance'], ['tasks', 'Tasks'],
+  ['virtual-office', 'Virtual Office'], ['leave', 'Leave'], ['team', 'Team'],
 ] as const;
 const roleName = (role: Role) => role === 'leader' ? 'Team Leader' : role === 'hr' ? 'HR' : 'Employee';
 const demoAccounts = [
@@ -27,6 +27,26 @@ function AppIcon({name,size=22}:{name:IconName;size?:number}) {
   if(name==='clock')return <svg {...common}><circle cx="12" cy="12" r="8.5" fill="currentColor" opacity=".12"/><circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7"/><path d="M12 7.5v5l3.2 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
   if(name==='check-out')return <svg {...common}><path d="M13.5 5H7.8A1.8 1.8 0 0 0 6 6.8v10.4A1.8 1.8 0 0 0 7.8 19h5.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="m15.5 8 4 4-4 4M10 12h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
   return <svg {...common}><path d="M10.5 5H6.8A1.8 1.8 0 0 0 5 6.8v10.4A1.8 1.8 0 0 0 6.8 19h3.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="m8.5 8-4 4 4 4M4.5 12H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 5h3.2A1.8 1.8 0 0 1 19 6.8v10.4a1.8 1.8 0 0 1-1.8 1.8H14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+}
+
+function PageIcon({page,size=21}:{page:PageId;size?:number}) {
+  const common={width:size,height:size,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg','aria-hidden':true,stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};
+  if(page==='dashboard')return <svg {...common}><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4.5" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/></svg>;
+  if(page==='attendance')return <svg {...common}><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M7.5 3.5v3M16.5 3.5v3M3.5 9h17"/><circle cx="12" cy="14.5" r="3.2"/><path d="M12 12.7v2l1.3.8"/></svg>;
+  if(page==='tasks')return <svg {...common}><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="m7.5 9 1.5 1.5 2.5-3M13.5 9h3M7.5 15l1.5 1.5 2.5-3M13.5 15h3"/></svg>;
+  if(page==='virtual-office')return <svg {...common}><path d="M4 20V7l8-3 8 3v13M2.5 20h19M8 9h2M14 9h2M8 13h2M14 13h2M10 20v-3.5h4V20"/></svg>;
+  if(page==='leave')return <svg {...common}><path d="M4 12a8 8 0 0 1 16 0c-1.7-1.4-3.3-1.4-5 0-2-1.4-4-1.4-6 0-1.7-1.4-3.3-1.4-5 0ZM12 4v13.5a2.5 2.5 0 0 0 5 0"/></svg>;
+  if(page==='team'||page==='employees')return <svg {...common}><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.3"/><path d="M3.5 20v-2.3A4.7 4.7 0 0 1 8.2 13h1.6a4.7 4.7 0 0 1 4.7 4.7V20M15 14h1.7a3.8 3.8 0 0 1 3.8 3.8V20"/></svg>;
+  if(page==='approvals')return <svg {...common}><path d="M8 5.5h-2A2.5 2.5 0 0 0 3.5 8v11A2.5 2.5 0 0 0 6 21h12a2.5 2.5 0 0 0 2.5-2.5V8A2.5 2.5 0 0 0 18 5.5h-2"/><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m8 15 2.5 2.5L16 12"/></svg>;
+  if(page==='profile')return <svg {...common}><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>;
+  return <svg {...common}><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2M12 19.2v2M21.2 12h-2M4.8 12h-2M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4M18.5 18.5l-1.4-1.4M6.9 6.9 5.5 5.5"/></svg>;
+}
+
+function AccountActionIcon({kind}:{kind:'switch'|'sign-out'}) {
+  const common={width:21,height:21,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg','aria-hidden':true,stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};
+  return kind==='switch'
+    ? <svg {...common}><path d="m7 7-3 3 3 3M4 10h11a4 4 0 0 1 4 4v1M17 17l3-3-3-3M20 14H9a4 4 0 0 1-4-4V9"/></svg>
+    : <svg {...common}><path d="M10 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20H10M14 8l4 4-4 4M9 12h9"/></svg>;
 }
 
 async function apiRequest<T>(path:string, init:RequestInit={}) {
@@ -74,8 +94,8 @@ export function KomorebiApp() {
   const didDrag = useRef(false);
   const browserNotices = useRef(false);
   const pages = useMemo(() => {
-    const extras = role === 'leader' ? [['approvals','Approvals','◎']] : role === 'hr' ? [['approvals','Approvals','◎'],['employees','Employees','♟']] : [];
-    return [...basePages, ...extras, ['profile','Profile','☺'], ['settings','Settings','⚙']] as [PageId,string,string][];
+    const extras = role === 'leader' ? [['approvals','Approvals']] : role === 'hr' ? [['approvals','Approvals'],['employees','Employees']] : [];
+    return [...basePages, ...extras, ['profile','Profile'], ['settings','Settings']] as [PageId,string][];
   }, [role]);
   const index = Math.max(0, pages.findIndex(([id]) => id === page));
   const previous = pages[(index - 1 + pages.length) % pages.length];
@@ -125,7 +145,7 @@ function Login({onRole}:{onRole:(role:Role)=>void}) {
   return <main className="login-view"><div className="ambient"/><div className="login-wrap"><div className="brand"><span className="brand-mark"><AppIcon name="brand" size={20}/></span>Komorebi Office</div><section className="glass login-card"><div className="welcome-mark"><AppIcon name="brand" size={30}/></div><h1>Welcome back</h1><p className="muted center">Sign in to start your workday.</p><form onSubmit={submit}><label className="field">Email<input name="email" type="email" placeholder="you@company.com" required/></label><label className="field">Password<input name="password" type="password" minLength={8} placeholder="Enter your password" required/></label><button className="button primary wide" disabled={loading}>{loading?'Signing in…':'Sign In'}</button><p className="form-message">{error}</p></form><div className="demo-divider"><span>Real demo accounts</span></div><div className="demo-account-list">{demoAccounts.map(([name,email,role])=><button key={email} className={`demo-account ${role}`} onClick={()=>void login(email,demoPassword)}><span className="avatar mini">{name[0]}</span><span><strong>{name}</strong><small>{roleName(role)} · {email}</small></span></button>)}</div><p className="tiny center">All accounts use the demo password shown in the project documentation.</p></section></div></main>;
 }
 
-function NavMenu({role,pages,current,go,signOut}:{role:Role;pages:[PageId,string,string][];current:PageId;go:(id:PageId)=>void;signOut:()=>void}){const [profile,setProfile]=useState<{displayName:string;jobTitle:string|null;team:{name:string}|null}|null>(null);useEffect(()=>{apiRequest<typeof profile>('/profile').then(setProfile).catch(()=>undefined)},[]);return <div className="glass overlay-panel menu-panel"><button className="menu-role" onClick={()=>go('profile')}><span className="avatar mini">{profile?.displayName?.[0]??(role==='leader'?'TL':role==='hr'?'HR':'E')}</span><div><strong>{profile?.displayName??roleName(role)}</strong><small>{profile?.jobTitle??profile?.team?.name??roleName(role)} · View profile</small></div></button><div className="menu-grid">{pages.filter(([id])=>id!=='profile').map(([id,label,icon])=><button key={id} className={`menu-item ${id===current?'active':''}`} onClick={()=>go(id)}><span>{icon}</span><span>{label}</span></button>)}<div className="menu-divider"/><button className="menu-item" onClick={signOut}><span>⇄</span><span>Switch account</span></button><button className="menu-item" onClick={signOut}><span>↪</span><span>Sign Out</span></button></div></div>}
+function NavMenu({role,pages,current,go,signOut}:{role:Role;pages:[PageId,string][];current:PageId;go:(id:PageId)=>void;signOut:()=>void}){const [profile,setProfile]=useState<{displayName:string;jobTitle:string|null;team:{name:string}|null}|null>(null);useEffect(()=>{apiRequest<typeof profile>('/profile').then(setProfile).catch(()=>undefined)},[]);return <div className="glass overlay-panel menu-panel"><button className="menu-role" onClick={()=>go('profile')}><span className="avatar mini">{profile?.displayName?.[0]??(role==='leader'?'TL':role==='hr'?'HR':'E')}</span><div><strong>{profile?.displayName??roleName(role)}</strong><small>{profile?.jobTitle??profile?.team?.name??roleName(role)} · View profile</small></div></button><div className="menu-grid">{pages.filter(([id])=>id!=='profile').map(([id,label])=><button key={id} className={`menu-item ${id===current?'active':''}`} onClick={()=>go(id)}><span className="menu-page-icon"><PageIcon page={id}/></span><span>{label}</span></button>)}<div className="menu-divider"/><button className="menu-item" onClick={signOut}><span className="menu-page-icon"><AccountActionIcon kind="switch"/></span><span>Switch account</span></button><button className="menu-item" onClick={signOut}><span className="menu-page-icon"><AccountActionIcon kind="sign-out"/></span><span>Sign Out</span></button></div></div>}
 function Notifications({go,openMessage,close}:{go:(id:PageId)=>void;openMessage:(contactId:string)=>void;close:()=>void}){type Notice={id:string;title:string;body:string;createdAt:string;readAt:string|null;actionType:string|null;actionTargetId:string|null};const [rows,setRows]=useState<Notice[]>([]);useEffect(()=>{const load=()=>apiRequest<Notice[]>('/notifications').then(setRows).catch(()=>setRows([]));const realtime=(event:Event)=>{if((event as CustomEvent<RealtimeEvent>).detail?.resource==='notifications')void load()};void load();window.addEventListener('komorebi:realtime',realtime);return()=>window.removeEventListener('komorebi:realtime',realtime)},[]);const destination=(item:Notice):PageId=>{const title=item.title.toLowerCase();if(title.includes('announcement'))return'dashboard';if(title.includes('approval needed')||title.includes('ready for review'))return'approvals';if(title.includes('leave'))return'leave';return'tasks'};const open=async(item:Notice)=>{setRows(current=>current.map(x=>x.id===item.id?{...x,readAt:new Date().toISOString()}:x));await apiRequest(`/notifications/${item.id}/read`,{method:'PATCH'}).catch(()=>undefined);if(item.actionType==='MESSAGE'&&item.actionTargetId){openMessage(item.actionTargetId);return}close();go(destination(item))};return <div className="glass overlay-panel notification-panel"><h3>Notifications</h3>{rows.map((item,i)=><button className={`notice-row notice-button ${item.readAt?'read':''}`} key={item.id} onClick={()=>void open(item)}><span className="notice-icon">{item.actionType==='MESSAGE'?'✉':['☂','✓','✦'][i%3]}</span><div><p>{item.title}</p><small>{item.body}</small><span>{new Date(item.createdAt).toLocaleString()}</span></div><b>›</b></button>)}{!rows.length&&<p className="empty-people">No notifications yet.</p>}</div>}
 
 function Screen({page,role,announcements,checkedIn,mode,setMode,check,modal,openPerson,openAnnouncement}:{page:PageId;role:Role;announcements:AnnouncementNote[];checkedIn:boolean;mode:'office'|'wfh';setMode:(m:'office'|'wfh')=>void;check:()=>void;modal:(m:ModalId)=>void;openPerson:(id:string)=>void;openAnnouncement:(i:number)=>void}){
