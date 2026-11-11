@@ -1,6 +1,6 @@
 # Komorebi Office
 
-Responsive employee workplace application built from the approved UX mockup and the architecture in `Komorebi_Office.pdf`.
+Responsive employee workplace application built from the approved UX mockup.
 
 ## Stack
 
